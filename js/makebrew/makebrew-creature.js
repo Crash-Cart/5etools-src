@@ -9,15 +9,8 @@ import {RenderBestiary} from "../render-bestiary.js";
 export class CreatureBuilder extends BuilderBase {
 	constructor () {
 		super({
-			titleSidebarLoadExisting: "Copy Existing Creature",
-			titleSidebarDownloadJson: "Download Creatures as JSON",
-			metaSidebarDownloadMarkdown: {
-				title: "Download Creatures as Markdown",
-				pFnGetText: (mons) => {
-					return RendererMarkdown.monster.pGetMarkdownDoc(mons);
-				},
-			},
 			prop: "monster",
+			pFnGetFluff: Renderer.monster.pGetFluff.bind(Renderer.monster),
 		});
 
 		this._bestiaryFluffIndex = null;
@@ -40,15 +33,11 @@ export class CreatureBuilder extends BuilderBase {
 		this._generateAttackCache = null;
 	}
 
-	static _getAsMarkdown (mon) {
-		return RendererMarkdown.get().render({entries: [{type: "statblockInline", dataType: "monster", data: mon}]});
-	}
-
-	async pHandleSidebarLoadExistingClick () {
+	async pHandleClickLoadExisting () {
 		const result = await SearchWidget.pGetUserCreatureSearch();
 		if (result) {
 			const creature = MiscUtil.copy(await DataLoader.pCacheAndGet(result.page, result.source, result.hash));
-			return this.pHandleSidebarLoadExistingData(creature);
+			return this.pHandleLoadExistingData(creature);
 		}
 	}
 
@@ -58,7 +47,7 @@ export class CreatureBuilder extends BuilderBase {
 	 * @param [opts.isForce]
 	 * @param [opts.meta]
 	 */
-	async pHandleSidebarLoadExistingData (creature, opts) {
+	async pHandleLoadExistingData (creature, opts) {
 		opts = opts || [];
 
 		const cleanOrigin = window.location.origin.replace(/\/+$/, "");
@@ -224,22 +213,42 @@ export class CreatureBuilder extends BuilderBase {
 					const mDice = /^(?<count>\d+)d(?<face>\d+)\b/i.exec(item.dmg1);
 					if (!mDice) return null;
 
+					const name = `${item.name} (${Parser.sourceJsonToAbv(item.source)})`;
+
 					const itemTypeAbv = DataUtil.itemType.unpackUid(item.type).abbreviation;
 					const abil = itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON ? "str" : "dex";
+					const dmgAvg = Number(mDice.groups.count) * ((Number(mDice.groups.face) + 1) / 2);
+					const isFinesse = (item?.property || []).some(property => DataUtil.itemProperty.unpackUid(property?.uid || property).abbreviation === Parser.ITM_PROP_ABV__FINESSE);
+
+					if (SourceUtil.isClassicSource(item.source)) {
+						const ptAtk = `${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON ? "m" : "r"}w${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON && item.range ? `,rw` : ""}`;
+						const ptRange = item.range
+							? `${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON ? `reach 5 ft. or ` : ""}range ${item.range} ft.`
+							: "reach 5 ft.";
+
+						return {
+							name,
+							entries: [
+								`{@atk ${ptAtk}} {@hit <$to_hit__${abil}$>} to hit, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+${abil}$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__${abil}$>}) ${Parser.dmgTypeToFull(item.dmgType)} damage.`,
+							],
+							entriesFinesse: isFinesse ? [
+								`{@atk ${ptAtk}} {@hit <$to_hit__dex$>} to hit, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+dex$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__dex$>}) ${Parser.dmgTypeToFull(item.dmgType)} damage.`,
+							] : null,
+						};
+					}
+
 					const ptAtk = `${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON ? "m" : "r"}w${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON && item.range ? `,rw` : ""}`;
 					const ptRange = item.range
 						? `${itemTypeAbv === Parser.ITM_TYP_ABV__MELEE_WEAPON ? `reach 5 ft. or ` : ""}range ${item.range} ft.`
 						: "reach 5 ft.";
-					const dmgAvg = Number(mDice.groups.count) * ((Number(mDice.groups.face) + 1) / 2);
-					const isFinesse = (item?.property || []).some(property => DataUtil.itemProperty.unpackUid(property?.uid || property).abbreviation === Parser.ITM_PROP_ABV__FINESSE);
 
 					return {
-						name: item.name,
+						name,
 						entries: [
-							`{@atk ${ptAtk}} {@hit <$to_hit__${abil}$>} to hit, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+${abil}$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__${abil}$>}) ${Parser.dmgTypeToFull(item.dmgType)} damage.`,
+							`{@atkr ${ptAtk}} {@hit <$to_hit__${abil}$>}, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+${abil}$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__${abil}$>}) ${Parser.dmgTypeToFull(item.dmgType).toTitleCase()} damage.`,
 						],
 						entriesFinesse: isFinesse ? [
-							`{@atk ${ptAtk}} {@hit <$to_hit__dex$>} to hit, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+dex$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__dex$>}) ${Parser.dmgTypeToFull(item.dmgType)} damage.`,
+							`{@atkr ${ptAtk}} {@hit <$to_hit__dex>}, ${ptRange}, one target. {@h}<$damage_avg__(size_mult*${dmgAvg})+dex$> ({@damage <$size_mult__${mDice.groups.count}$>d${mDice.groups.face}<$damage_mod__${abil}$>}) ${Parser.dmgTypeToFull(item.dmgType).toTitleCase()} damage.`,
 						] : null,
 					};
 				})
@@ -429,7 +438,6 @@ export class CreatureBuilder extends BuilderBase {
 			MiscTag.tryRun(this._state);
 			TagImmResVulnConditional.tryRun(this._state);
 			DragonAgeTag.tryRun(this._state);
-			AttachedItemTag.tryRun(this._state);
 
 			this.renderOutput();
 			this.doUiSave();
@@ -448,6 +456,7 @@ export class CreatureBuilder extends BuilderBase {
 				new TabUiUtil.TabMeta({name: "Core", hasBorder: true}),
 				new TabUiUtil.TabMeta({name: "Defenses", hasBorder: true}),
 				new TabUiUtil.TabMeta({name: "Abilities", hasBorder: true}),
+				new TabUiUtil.TabMeta({name: "Gear", hasBorder: true}),
 				new TabUiUtil.TabMeta({name: "Flavor/Misc", hasBorder: true}),
 			],
 			{
@@ -455,12 +464,12 @@ export class CreatureBuilder extends BuilderBase {
 				cbTabChange: this.doUiSave.bind(this),
 			},
 		);
-		const [infoTab, speciesTab, coreTab, defenseTab, abilTab, miscTab] = tabs;
+		const [infoTab, speciesTab, coreTab, defenseTab, abilTab, tabGear, miscTab] = tabs;
 		ee`<div class="ve-flex-v-center ve-w-100 ve-no-shrink ve-ui-tab__wrp-tab-heads--border">${tabs.map(it => it.btnTab)}</div>`.appendTo(wrp);
 		tabs.forEach(it => it.wrpTab.appendTo(wrp));
 
 		// INFO
-		BuilderUi.getStateIptString("Name", cb, this._state, {nullable: false, callback: () => this.pRenderSideMenu()}, "name").appendTo(infoTab.wrpTab);
+		BuilderUi.getStateIptString("Name", cb, this._state, {nullable: false, callback: () => this.pRenderEntityList()}, "name").appendTo(infoTab.wrpTab);
 		this.__getShortNameInput(cb).appendTo(infoTab.wrpTab);
 		this._selSource = this.getSourceInput(cb).appendTo(infoTab.wrpTab);
 		BuilderUi.getStateIptString("Page", cb, this._state, {}, "page").appendTo(infoTab.wrpTab);
@@ -544,6 +553,12 @@ export class CreatureBuilder extends BuilderBase {
 		BuilderUi.getStateIptEntries("Mythic Action Intro", cb, this._state, {}, "mythicHeader").appendTo(abilTab.wrpTab);
 		this.__getMythicActionInput(cb).appendTo(abilTab.wrpTab);
 		this.__getVariantInput(cb).appendTo(abilTab.wrpTab);
+
+		// GEAR
+		this.__getGearInput(cb).appendTo(tabGear.wrpTab);
+		const {row: rowAttachedItemInput, doRefresh: doRefreshAttachedItems} = this.__getAttachedItemInput(cb);
+		rowAttachedItemInput.appendTo(tabGear.wrpTab);
+		this.__getAttachedItemInputGenerated(cb, [doRefreshAttachedItems]).appendTo(tabGear.wrpTab);
 
 		// FLAVOR/MISC
 		this.__getTokenInput(cb).appendTo(miscTab.wrpTab);
@@ -1209,10 +1224,10 @@ export class CreatureBuilder extends BuilderBase {
 
 		const wrp = ee`<div class="ve-flex-col mkbru__wrp-rows mkbru__wrp-rows--removable">
 			<div class="ve-flex-v-center ve-mb-2">${iptAc}${iptSpecial}${selMode}</div>
-			${ee`<div>${stageFrom}</div>`}
+			<div>${stageFrom}</div>
 			<div class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--50">Condition</span>${iptCond}</div>
 			<label class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--50">Surround with brackets</span>${cbBraces}</label>
-			${ee`<div class="ve-text-right">${btnRemove}</div>`}
+			<div class="ve-text-right">${btnRemove}</div>
 		</div>`;
 		const out = {wrp, getAc};
 		acRows.push(out);
@@ -3321,6 +3336,174 @@ export class CreatureBuilder extends BuilderBase {
 
 	__getVariantInput (cb) {
 		return this.__getGenericEntryInput(cb, {name: "Variants", shortName: "Variant", prop: "variant"});
+	}
+
+	__getGearInput (cb) {
+		const [row, rowInner] = BuilderUi.getLabelledRowTuple("Gear", {isMarked: true});
+
+		const doUpdateState = () => {
+			const raw = rowMetas.map(row => row.getValue()).filter(Boolean);
+
+			if (raw.length) this._state.gear = raw;
+			else delete this._state.gear;
+
+			cb();
+		};
+
+		const rowMetas = [];
+
+		const wrpRows = ee`<div></div>`.appendTo(rowInner);
+
+		this._state.gear?.forEach(gear => CreatureBuilder.__getGearInput__getGearRow(doUpdateState, rowMetas, gear).wrp.appendTo(wrpRows));
+
+		const wrpBtnAdd = ee`<div></div>`.appendTo(rowInner);
+		ee`<button class="ve-btn ve-btn-xs ve-btn-default">Add Gear</button>`
+			.appendTo(wrpBtnAdd)
+			.onn("click", () => {
+				CreatureBuilder.__getGearInput__getGearRow(doUpdateState, rowMetas).wrp.appendTo(wrpRows);
+				doUpdateState();
+			});
+
+		return row;
+	}
+
+	static __getGearInput__getGearRow (doUpdateState, rowMetas, stateInitial = null) {
+		const compRow = BaseComponent.fromObject({uid: stateInitial?.item || stateInitial || "", quantity: stateInitial?.quantity ?? 1, displayName: stateInitial?.displayName || ""});
+
+		const getValue = () => {
+			if (!compRow._state.uid) return null;
+
+			if (compRow._state.quantity !== 1 || !!compRow._state.displayName) {
+				return {
+					item: compRow._state.uid,
+					quantity: compRow._state.quantity,
+					displayName: compRow._state.displayName,
+				};
+			}
+
+			return compRow._state.uid;
+		};
+
+		const iptUid = ComponentUiUtil.getIptStr(compRow, "uid", {placeholder: "Item UID"});
+		const iptQuantity = ComponentUiUtil.getIptNumber(compRow, "quantity", 1);
+		const iptDisplayName = ComponentUiUtil.getIptStr(compRow, "displayName", {placeholder: "Display Name"});
+
+		compRow._addHookAll("state", () => {
+			doUpdateState();
+		});
+
+		// REMOVE CONTROLS
+		const btnRemove = ee`<button class="ve-btn ve-btn-xs ve-btn-danger mkbru__btn-rm-row ve-mb-2" title="Remove AC Source"><span class="glyphicon glyphicon-trash"></span></button>`
+			.onn("click", () => {
+				rowMetas.splice(rowMetas.indexOf(out), 1);
+				wrp.empty().remove();
+				doUpdateState();
+			});
+
+		const wrp = ee`<div class="ve-flex-col mkbru__wrp-rows">
+			<div class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--33">Item ID</span>${iptUid}</div>
+			<div class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--33">Quantity</span>${iptQuantity}</div>
+			<div class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--33">Display Name</span>${iptDisplayName}</div>
+			<div class="ve-text-right">${btnRemove}</div>
+		</div>`;
+
+		const out = {
+			wrp,
+			getValue,
+		};
+		rowMetas.push(out);
+
+		return out;
+	}
+
+	__getAttachedItemInput (cb) {
+		const [row, rowInner] = BuilderUi.getLabelledRowTuple("Attached Items", {isMarked: true});
+
+		const doUpdateState = () => {
+			const raw = rowMetas.map(row => row.getValue()).filter(Boolean);
+
+			if (raw.length) this._state.attachedItems = raw;
+			else delete this._state.attachedItems;
+
+			cb();
+		};
+
+		const rowMetas = [];
+
+		const wrpRows = ee`<div></div>`.appendTo(rowInner);
+
+		const doRefresh = () => {
+			wrpRows.empty();
+			rowMetas.splice(0, rowMetas.length);
+			this._state.attachedItems?.forEach(gear => CreatureBuilder.__getAttachedItemInput__getAttachedItemRow(doUpdateState, rowMetas, gear).wrp.appendTo(wrpRows));
+		};
+		doRefresh();
+
+		const btnAdd = ee`<button class="ve-btn ve-btn-xs ve-btn-default ve-mr-2">Add Attached Item</button>`
+			.onn("click", () => {
+				CreatureBuilder.__getAttachedItemInput__getAttachedItemRow(doUpdateState, rowMetas).wrp.appendTo(wrpRows);
+				doUpdateState();
+			});
+
+		ee`<div>${btnAdd}</div>`.appendTo(rowInner);
+
+		return {
+			row,
+			doRefresh,
+		};
+	}
+
+	__getAttachedItemInputGenerated (cb, fnsDoRefresh) {
+		const [row, rowInner] = BuilderUi.getLabelledRowTuple("Generated", {isMarked: true});
+
+		const btnAdd = ee`<button class="ve-btn ve-btn-xs ve-btn-default" title="Generate additional attached items based on the creatures's current actions">Generate Additional Attached Items</button>`
+			.onn("click", async () => {
+				AttachedItemTag.tryRun(this._state, {styleHint: this._meta.styleHint, isAddOnly: true});
+				cb();
+				fnsDoRefresh.forEach(fn => fn());
+			});
+
+		ee`<div class="ve-flex-v-center">
+			${btnAdd}
+		</div>`.appendTo(rowInner);
+
+		return row;
+	}
+
+	static __getAttachedItemInput__getAttachedItemRow (doUpdateState, rowMetas, stateInitial = null) {
+		const compRow = BaseComponent.fromObject({uid: stateInitial?.item || stateInitial || ""});
+
+		const getValue = () => {
+			if (!compRow._state.uid) return null;
+			return compRow._state.uid;
+		};
+
+		const iptUid = ComponentUiUtil.getIptStr(compRow, "uid", {placeholder: "Item UID"});
+
+		compRow._addHookAll("state", () => {
+			doUpdateState();
+		});
+
+		// REMOVE CONTROLS
+		const btnRemove = ee`<button class="ve-btn ve-btn-xs ve-btn-danger mkbru__btn-rm-row ve-mb-2" title="Remove AC Source"><span class="glyphicon glyphicon-trash"></span></button>`
+			.onn("click", () => {
+				rowMetas.splice(rowMetas.indexOf(out), 1);
+				wrp.empty().remove();
+				doUpdateState();
+			});
+
+		const wrp = ee`<div class="ve-flex-col mkbru__wrp-rows">
+			<div class="ve-flex-v-center ve-mb-2"><span class="ve-mr-2 mkbru__sub-name--33">Item ID</span>${iptUid}</div>
+			<div class="ve-text-right">${btnRemove}</div>
+		</div>`;
+
+		const out = {
+			wrp,
+			getValue,
+		};
+		rowMetas.push(out);
+
+		return out;
 	}
 
 	__getTokenInput (cb) {
