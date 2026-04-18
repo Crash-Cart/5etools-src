@@ -1,0 +1,25 @@
+<svg width="100%" viewBox="0 0 680 400" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>D20 quickref icon</title>
+  <desc>A flat d20 icon suitable for use as a 5etools tile</desc>
+
+  <style>
+    .die-fill { fill: var(--color-background-secondary); stroke: var(--color-text-primary); stroke-width: 2; }
+    .die-inner { fill: none; stroke: var(--color-text-primary); stroke-width: 1.2; }
+    .die-text { font-family: var(--font-sans); font-size: 48px; font-weight: 500; fill: var(--color-text-primary); text-anchor: middle; dominant-baseline: middle; }
+    .label { font-family: var(--font-sans); font-size: 13px; fill: var(--color-text-secondary); text-anchor: middle; }
+  </style>
+
+  <polygon class="die-fill"
+    points="340,60 430,110 460,200 420,285 340,315 260,285 220,200 250,110"
+  />
+  <line class="die-inner" x1="340" y1="60" x2="340" y2="185"/>
+  <line class="die-inner" x1="430" y1="110" x2="340" y2="185"/>
+  <line class="die-inner" x1="250" y1="110" x2="340" y2="185"/>
+  <line class="die-inner" x1="460" y1="200" x2="340" y2="185"/>
+  <line class="die-inner" x1="220" y1="200" x2="340" y2="185"/>
+  <line class="die-inner" x1="420" y1="285" x2="340" y2="185"/>
+  <line class="die-inner" x1="260" y1="285" x2="340" y2="185"/>
+  <line class="die-inner" x1="340" y1="315" x2="340" y2="185"/>
+  <text class="die-text" x="340" y="190">20</text>
+  <text class="label" x="340" y="360">quick reference</text>
+</svg>
